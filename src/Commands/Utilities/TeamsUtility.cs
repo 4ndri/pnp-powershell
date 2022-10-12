@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -130,9 +131,8 @@ namespace PnP.PowerShell.Commands.Utilities
             if (string.IsNullOrEmpty(groupId))
             {
                 group = await CreateGroupAsync(accessToken, connection, displayName, description, classification, mailNickname, visibility, owners, sensitivityLabels, templateType, resourceBehaviorOptions);
-                bool wait = true;
                 int iterations = 0;
-                while (wait)
+                while (true)
                 {
                     iterations++;
 
@@ -141,19 +141,23 @@ namespace PnP.PowerShell.Commands.Utilities
                         var createdGroup = await GraphHelper.GetAsync<Group>(connection, $"v1.0/groups/{group.Id}", accessToken);
                         if (!string.IsNullOrEmpty(createdGroup.DisplayName))
                         {
-                            wait = false;
+                            break;
                         }
                     }
-                    catch (Exception)
+                    catch (GraphException graphEx)
                     {
-                        // In case of exception wait for 5 secs
-                        await Task.Delay(TimeSpan.FromSeconds(5));
+                        if(graphEx.HttpResponse.StatusCode == HttpStatusCode.Forbidden)
+                        {
+                            throw;
+                        }
                     }
 
                     // Don't wait more than 1 minute
-                    if (iterations > 12)
+                    await Task.Delay(5000);
+                    iterations++;
+                    if (iterations > 12) // don't try more than 10 times
                     {
-                        wait = false;
+                        break;
                     }
                 }
             }
@@ -170,9 +174,8 @@ namespace PnP.PowerShell.Commands.Utilities
             if (group != null)
             {
                 Team team = teamCI.ToTeam(group.Visibility);
-                var retry = true;
                 var iteration = 0;
-                while (retry)
+                while (true)
                 {
                     try
                     {
@@ -181,18 +184,21 @@ namespace PnP.PowerShell.Commands.Utilities
                         {
                             returnTeam = await GetTeamAsync(accessToken, connection, group.Id);
                         }
-                        retry = false;
+                        break;
                     }
-
-                    catch (Exception)
+                    catch (GraphException graphEx)
                     {
-                        await Task.Delay(5000);
-                        iteration++;
+                        if (graphEx.HttpResponse.StatusCode == HttpStatusCode.Forbidden)
+                        {
+                            throw;
+                        }
+                        
                     }
-
+                    await Task.Delay(5000);
+                    iteration++;
                     if (iteration > 10) // don't try more than 10 times
                     {
-                        retry = false;
+                        break;
                     }
                 }
 
@@ -264,7 +270,7 @@ namespace PnP.PowerShell.Commands.Utilities
             }
 
             // Check if by now we've identified a user Id to become the owner
-            if (!string.IsNullOrEmpty(ownerId))
+            if (string.IsNullOrEmpty(ownerId))
             {
                 var contextSettings = connection.Context.GetContextSettings();
 

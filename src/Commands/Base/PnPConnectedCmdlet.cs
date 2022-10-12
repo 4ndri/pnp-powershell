@@ -76,7 +76,7 @@ namespace PnP.PowerShell.Commands.Base
                 // For backwards compatibility we will throw the exception as a PSInvalidOperationException if -ErrorAction:Stop has NOT been specified
                 if (!ParameterSpecified("ErrorAction") || MyInvocation.BoundParameters["ErrorAction"].ToString().ToLowerInvariant() != "stop")
                 {
-                    throw new PSInvalidOperationException(errorMessage);
+                    throw new PSInvalidOperationException(errorMessage, ex);
                 }
 
                 Connection.RestoreCachedContext(Connection.Url);
